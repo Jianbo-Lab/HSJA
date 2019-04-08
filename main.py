@@ -80,7 +80,7 @@ def attack(args):
 
 		print('attacking the {}th sample...'.format(i))
 
-		perturbed = bdpp(model, 
+		perturbed = bapp(model, 
 							sample, 
 							up_th = 1, 
 							low_th = 0, 

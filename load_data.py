@@ -1,5 +1,4 @@
 from __future__ import absolute_import, division, print_function 
-# from model import *
 import numpy as np
 import tensorflow as tf
 import os 
@@ -7,8 +6,6 @@ import time
 import numpy as np 
 import sys
 import os
-import tarfile
-import zipfile 
 
 import keras
 import math 
