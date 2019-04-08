@@ -27,7 +27,9 @@ python main.py --constraint linf --attack_type untargeted --num_samples 5
 # Carry out Linf based targeted attack on 5 samples.
 python main.py --constraint linf --attack_type targeted --num_samples 5
 
-# Results are stored in cifar10resnet/figs/. For each image, the left-hand side is the original example and the right-hand side is its perturbed version.
+# Results are stored in cifar10resnet/figs/. 
+# For each image, the left-hand side is the original example and 
+# the right-hand side is its perturbed version.
 ```
 
 See `main.py` and `bapp.py` for details. 
