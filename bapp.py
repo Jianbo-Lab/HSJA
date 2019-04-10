@@ -3,16 +3,17 @@ import numpy as np
 
 def bapp(model, 
 	sample, 
-	up_th = 1, 
-	low_th = 0, 
+	clip_max = 1, 
+	clip_min = 0, 
 	constraint = 'l2', 
-	num_iters = 40, 
+	num_iterations = 40, 
 	gamma = 0.01, 
 	target_label = None, 
 	target_image = None, 
-	epsilon_type = 'geometric_progression', 
-	max_batch_size = 1e4,
-	init_batch_size = 100):
+	stepsize_search = 'geometric_progression', 
+	max_num_evals = 1e4,
+	init_num_evals = 100,
+	verbose = True):
 	"""
 	Main algorithm for Boundary Attack ++.
 
@@ -21,13 +22,13 @@ def bapp(model,
 
 	predict outputs probability scores.
 
-	up_th: upper bound of the image.
+	clip_max: upper bound of the image.
 
 	lower_th: lower bound of the image.
 
 	constraint: choose between [l2, linf].
 
-	num_iters: number of iterations.
+	num_iterations: number of iterations.
 
 	gamma: used to set binary search threshold theta.
 
@@ -35,30 +36,31 @@ def bapp(model,
 
 	target_image: an array with the same size as sample, or None. 
 
-	epsilon_type: choose between 'geometric_progression', 'grid_search'.
+	stepsize_search: choose between 'geometric_progression', 'grid_search'.
 
-	max_batch_size: maximum batch size for estimating gradient.
+	max_num_evals: maximum number of evaluations for estimating gradient.
 
-	init_batch_size: initial batch size for estimating gradient.
+	init_num_evals: initial number of evaluations for estimating gradient.
 
 	Output:
 	perturbed image.
 	
 	"""
 	# Set parameters
-	h, w, c = sample.shape
 	original_label = np.argmax(model.predict(sample))
-	params = {'up_th': up_th, 'low_th': low_th, 'h': h, 'w': w, 'c': c, 
+	params = {'clip_max': clip_max, 'clip_min': clip_min, 
+				'shape': sample.shape,
 				'original_label': original_label, 
 				'target_label': target_label,
 				'target_image': target_image, 
 				'constraint': constraint,
-				'num_iters': num_iters, 
+				'num_iterations': num_iterations, 
 				'gamma': gamma, 
-				'd': np.prod(sample.shape), 
-				'epsilon_type': epsilon_type,
-				'max_batch_size': max_batch_size,
-				'init_batch_size': init_batch_size,
+				'd': int(np.prod(sample.shape)), 
+				'stepsize_search': stepsize_search,
+				'max_num_evals': max_num_evals,
+				'init_num_evals': init_num_evals,
+				'verbose': verbose,
 				}
 
 	# Set binary search threshold.
@@ -72,23 +74,23 @@ def bapp(model,
 	dist_post_update = compute_distance(perturbed, sample, constraint)
 
 	# Project the initialization to the boundary.
-	perturbed, dist = line_search_batch(sample, 
+	perturbed, dist = binary_search_batch(sample, 
 		np.expand_dims(perturbed, 0), 
 		model, 
 		params)
 
-	for j in np.arange(params['num_iters']):
+	for j in np.arange(params['num_iterations']):
 		params['cur_iter'] = j + 1
 
 		# Choose delta.
 		delta = select_delta(params, dist_post_update)
 
-		# Choose batch size.
-		batch_size = int(params['init_batch_size'] * np.sqrt(j+1))
-		batch_size = int(min([batch_size, params['max_batch_size']]))
+		# Choose number of evaluations.
+		num_evals = int(params['init_num_evals'] * np.sqrt(j+1))
+		num_evals = int(min([num_evals, params['max_num_evals']]))
 
 		# approximate gradient.
-		gradf = approximate_gradient(model, perturbed, batch_size, 
+		gradf = approximate_gradient(model, perturbed, num_evals, 
 			delta, params)
 		if params['constraint'] == 'linf':
 			update = np.sign(gradf)
@@ -96,51 +98,53 @@ def bapp(model,
 			update = gradf
 
 		# search step size.
-		if params['epsilon_type'] == 'geometric_progression':
+		if params['stepsize_search'] == 'geometric_progression':
 			# find step size.
 			epsilon = geometric_progression_for_stepsize(perturbed, 
 				update, dist, model, params)
 
 			# Update the sample. 
 			perturbed = clip_image(perturbed + epsilon * gradf, 
-				low_th, up_th)
+				clip_min, clip_max)
 
 			# Binary search to return to the boundary. 
-			perturbed, dist_post_update = line_search_batch(sample, 
+			perturbed, dist_post_update = binary_search_batch(sample, 
 				perturbed[None], model, params)
 
-		elif params['epsilon_type'] == 'grid_search':
+		elif params['stepsize_search'] == 'grid_search':
 			# Grid search for stepsize.
 			epsilons = np.logspace(-4, 0, num=20, endpoint = True) * dist
-			perturbeds = x + epsilons.reshape(-1,1,1,1) * update
-			perturbeds = clip_image(perturbeds, 
-				params['low_th'], params['up_th'])
-			labels = np.argmax(model.predict(perturbeds), axis = 1)
+			epsilons_shape = [20] + list(params['shape'])
+			perturbeds = perturbed + epsilons.reshape(epsilons_shape) * update
+			idx_perturbed = decision_function(model, perturbeds, params)
 
-			if params['target_label'] is None:
-				idx_perturbed = labels != original_label
-			else:
-				idx_perturbed = labels == params['target_label']
-
-			if np.sum(idx_perturbed) == 0:
-				# Do not perturb if all perturbation lies 
-				# on the other side of the boundary. 
-				perturbed = x
-				epsilon_selected = 0
-			else:
+			if np.sum(idx_perturbed) > 0:
 				# Select the perturbation that yields the minimum distance # after binary search.
-				perturbed, dist_post_update = line_search_batch(sample, 
+				perturbed, dist_post_update = binary_search_batch(sample, 
 					perturbeds[idx_perturbed], model, params)
 
 		# compute new distance.
 		dist = compute_distance(perturbed, sample, constraint)
-		print('iteration: {:d}, {:s} distance {:.4E}'.format(j+1, constraint, dist))
+		if verbose:
+			print('iteration: {:d}, {:s} distance {:.4E}'.format(j+1, constraint, dist))
 
 	return perturbed
 
-def clip_image(image, low_th, up_th):
+def decision_function(model, images, params):
+	"""
+	Decision function output 1 on the desired side of the boundary,
+	0 otherwise.
+	"""
+	images = clip_image(images, params['clip_min'], params['clip_max'])
+	prob = model.predict(images)
+	if params['target_label'] is None:
+		return np.argmax(prob, axis = 1) != params['original_label'] 
+	else:
+		return np.argmax(prob, axis = 1) == params['target_label']
+
+def clip_image(image, clip_min, clip_max):
 	# Clip an image, or an image batch, with upper and lower threshold.
-	return np.minimum(np.maximum(low_th, image), up_th) 
+	return np.minimum(np.maximum(clip_min, image), clip_max) 
 
 
 def compute_distance(x_ori, x_pert, constraint = 'l2'):
@@ -151,32 +155,25 @@ def compute_distance(x_ori, x_pert, constraint = 'l2'):
 		return np.max(abs(x_ori - x_pert))
 
 
-def approximate_gradient(model, sample, num_samples, delta, params):
-	up_th, low_th = params['up_th'], params['low_th']
-	h,w,c = params['h'], params['w'], params['c']
+def approximate_gradient(model, sample, num_evals, delta, params):
+	clip_max, clip_min = params['clip_max'], params['clip_min']
 
 	# Generate random vectors.
+	noise_shape = [num_evals] + list(params['shape'])
 	if params['constraint'] == 'l2':
-		rv = np.random.randn(num_samples, h, w, c)
+		rv = np.random.randn(*noise_shape)
 	elif params['constraint'] == 'linf':
-		rv = np.random.uniform(low = -1, high = 1, 
-			size = (num_samples, h, w, c))
+		rv = np.random.uniform(low = -1, high = 1, size = noise_shape)
 
 	rv = rv / np.sqrt(np.sum(rv ** 2, axis = (1,2,3), keepdims = True))
 	perturbed = sample + delta * rv
-	perturbed = clip_image(perturbed, low_th, up_th)
+	perturbed = clip_image(perturbed, clip_min, clip_max)
 	rv = (perturbed - sample) / delta
 
 	# query the model.
-	prob = model.predict(perturbed)
-	if params['target_label'] is None:
-		fval = np.argmax(prob, axis = 1) != params['original_label'] 
-		# 1 if label changes. 
-
-	else:
-		fval = np.argmax(prob, axis = 1) == params['target_label']
-
-	fval = 2 * fval.astype(float).reshape(-1,1,1,1) - 1.0
+	decisions = decision_function(model, perturbed, params)
+	decision_shape = [len(decisions)] + [1] * len(params['shape'])
+	fval = 2 * decisions.astype(float).reshape(decision_shape) - 1.0
 
 	# Baseline subtraction (when fval differs)
 	if np.mean(fval) == 1.0: # label changes. 
@@ -193,56 +190,21 @@ def approximate_gradient(model, sample, num_samples, delta, params):
 	return gradf
 
 
-def project(original_image, perturbed_images, alphas, constraint):
-	if constraint == 'l2':
-		alphas = alphas.reshape(-1, 1, 1, 1)
+def project(original_image, perturbed_images, alphas, params):
+	alphas_shape = [len(alphas)] + [1] * len(params['shape'])
+	alphas = alphas.reshape(alphas_shape)
+	if params['constraint'] == 'l2':
 		return (1-alphas) * original_image + alphas * perturbed_images
-	elif constraint == 'linf':
+	elif params['constraint'] == 'linf':
 		out_images = clip_image(
 			perturbed_images, 
-			original_image - alphas.reshape(-1,1,1,1), 
-			original_image + alphas.reshape(-1,1,1,1)
+			original_image - alphas, 
+			original_image + alphas
 			)
 		return out_images
 
 
-def _line_search_batch(highs, lows, original_image, perturbed_images, model, 
-			thresholds, params):
-	""" Recursive helper for Binary search to approach the boundar. """
-
-	# Return when threshold is achieved. 
-	if np.max((highs - lows) / thresholds) < 1:
-		out_image = project(
-			original_image, 
-			perturbed_images, 
-			highs, 
-			params['constraint']
-			)
-		return out_image
-
-	# projection to mids.
-	mids = (highs + lows) / 2.0
-	mid_images = project(
-		original_image, 
-		perturbed_images, 
-		mids, 
-		params['constraint']
-		)
-
-	# Update highs and lows based on model decisions.
-	mid_labels = np.argmax(model.predict(mid_images), axis = 1)
-	if params['target_label'] is None:
-		lows = np.where(params['original_label'] == mid_labels, mids, lows)
-		highs = np.where(params['original_label'] != mid_labels, mids, highs)
-	else:
-		lows = np.where(params['target_label'] != mid_labels, mids, lows)
-		highs = np.where(params['target_label'] == mid_labels, mids, highs)
-
-	return _line_search_batch(highs, lows, original_image, perturbed_images, 
-		model, thresholds, params)
-
-
-def line_search_batch(original_image, perturbed_images, model, params):
+def binary_search_batch(original_image, perturbed_images, model, params):
 	""" Binary search to approach the boundar. """
 
 	# Compute distance between each of perturbed image and original image.
@@ -268,11 +230,20 @@ def line_search_batch(original_image, perturbed_images, model, params):
 	
 
 	# Call recursive function. 
-	out_images = _line_search_batch(highs, lows, original_image, 
-		perturbed_images, model, thresholds, params)
+	while np.max((highs - lows) / thresholds) > 1:
+		# projection to mids.
+		mids = (highs + lows) / 2.0
+		mid_images = project(original_image, perturbed_images, mids, params)
+
+		# Update highs and lows based on model decisions.
+		decisions = decision_function(model, mid_images, params)
+		lows = np.where(decisions == 0, mids, lows)
+		highs = np.where(decisions == 1, mids, highs)
+
+	out_images = project(original_image, perturbed_images, highs, params)
 
 	# Compute distance of the output image to select the best choice. 
-	# (only used when epsilon_type is grid_search.)
+	# (only used when stepsize_search is grid_search.)
 	dists = np.array([
 		compute_distance(
 			original_image, 
@@ -289,34 +260,32 @@ def line_search_batch(original_image, perturbed_images, model, params):
 
 def initialize(model, sample, params):
 	""" 
-	Implementation of BlendedUniformNoiseAttack in Foolbox.
+	Efficient Implementation of BlendedUniformNoiseAttack in Foolbox.
 	"""
 	success = 0
 	num_evals = 0
 
 	if params['target_image'] is None:
-		# increasing scale if initialization fails.
-		num = 1000
-		epsilons = np.linspace(0, 1, num=num + 1)[1:]
-		while success == 0:
-			if num_evals < num:
-				epsilon = epsilons[num_evals]
+		# Find a misclassified random noise.
+		while True:
+			random_noise = np.random.uniform(-1, 1, size = params['shape'])
+			success = decision_function(model,random_noise[None], params)
+			if success:
+				break
+
+		# Binary search to minimize l2 distance to original image.
+		low = 0.0
+		high = 1.0
+		while high - low > 0.001:
+			mid = (high + low) / 2.0
+			blended = (1 - mid) * sample + mid * random_noise 
+			success = decision_function(model, blended[None], params)
+			if success:
+				high = mid
 			else:
-				epsilon = epsilons[-1]
+				low = mid
 
-			random_noise = np.random.uniform(-1, 1, 
-				size = (params['h'], params['w'], params['c']))
-
-			initialization = clip_image(
-				(1- epsilon) * sample +  epsilon * random_noise, 
-				params['low_th'], 
-				params['up_th']
-				)
-
-			prob = model.predict(initialization)
-			success = np.argmax(prob) != params['original_label'] 
-			# 1 if label changes.
-			num_evals += 1
+		initialization = (1 - high) * sample + high * random_noise 
 
 	else:
 		initialization = params['target_image']
@@ -331,17 +300,10 @@ def geometric_progression_for_stepsize(x, update, dist, model, params):
 	the desired side of the boundary,
 	"""
 	epsilon = dist / np.sqrt(params['cur_iter']) 
+
 	def phi(epsilon):
 		new = x + epsilon * update
-		new = clip_image(new, params['low_th'], params['up_th'])
-
-		label = np.argmax(model.predict(new))
-
-		if params['target_label'] is None:
-			success = label != params['original_label']
-		else:
-			success = label == params['target_label']
-
+		success = decision_function(model, new[None], params)
 		return success
 
 	while not phi(epsilon):
@@ -356,7 +318,7 @@ def select_delta(params, dist_post_update):
 
 	"""
 	if params['cur_iter'] == 1:
-		delta = 0.1 * (params['up_th'] - params['low_th'])
+		delta = 0.1 * (params['clip_max'] - params['clip_min'])
 	else:
 		if params['constraint'] == 'l2':
 			delta = np.sqrt(params['d']) * params['theta'] * dist_post_update

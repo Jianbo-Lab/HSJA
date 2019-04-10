@@ -36,8 +36,8 @@ def construct_model_and_data(args):
 				'x_test': x_test,
 				'y_test': y_test,
 				'model': model,
-				'up_th': 1.0,
-				'low_th': 0.0
+				'clip_max': 1.0,
+				'clip_min': 0.0
 				}
 
 	if args.attack_type == 'targeted':
@@ -62,8 +62,8 @@ def attack(args):
 	x_test = outputs['x_test']
 	y_test = outputs['y_test']
 	model = outputs['model']
-	up_th = outputs['up_th']
-	low_th = outputs['low_th']
+	clip_max = outputs['clip_max']
+	clip_min = outputs['clip_min']
 	if args.attack_type == 'targeted':
 		target_labels = outputs['target_labels']
 		target_images = outputs['target_images']
@@ -82,16 +82,16 @@ def attack(args):
 
 		perturbed = bapp(model, 
 							sample, 
-							up_th = 1, 
-							low_th = 0, 
+							clip_max = 1, 
+							clip_min = 0, 
 							constraint = args.constraint, 
-							num_iters = args.num_iters, 
+							num_iterations = args.num_iterations, 
 							gamma = 0.01, 
 							target_label = target_label, 
 							target_image = target_image, 
-							epsilon_type = args.epsilon_type, 
-							max_batch_size = 1e4,
-							init_batch_size = 100)
+							stepsize_search = args.stepsize_search, 
+							max_num_evals = 1e4,
+							init_num_evals = 100)
 
 		image = np.concatenate([sample, np.zeros((32,8,3)), perturbed], axis = 1)
 		scipy.misc.imsave('{}/figs/{}-{}-{}.jpg'.format(data_model, 
@@ -120,9 +120,9 @@ if __name__ == '__main__':
 	parser.add_argument('--num_samples', type = int, 
 		default = 10) 
 
-	parser.add_argument('--num_iters', type = int, 
+	parser.add_argument('--num_iterations', type = int, 
 		default = 64) 
-	parser.add_argument('--epsilon_type', type = str, 
+	parser.add_argument('--stepsize_search', type = str, 
 		choices = ['geometric_progression', 'grid_search'], 
 		default = 'geometric_progression')
 
