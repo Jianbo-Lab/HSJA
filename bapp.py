@@ -24,7 +24,7 @@ def bapp(model,
 
 	clip_max: upper bound of the image.
 
-	lower_th: lower bound of the image.
+	clip_min: lower bound of the image.
 
 	constraint: choose between [l2, linf].
 
