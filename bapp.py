@@ -114,7 +114,7 @@ def bapp(model,
 		elif params['stepsize_search'] == 'grid_search':
 			# Grid search for stepsize.
 			epsilons = np.logspace(-4, 0, num=20, endpoint = True) * dist
-			epsilons_shape = [20] + list(params['shape'])
+			epsilons_shape = [20] + len(params['shape']) * [1]
 			perturbeds = perturbed + epsilons.reshape(epsilons_shape) * update
 			idx_perturbed = decision_function(model, perturbeds, params)
 
