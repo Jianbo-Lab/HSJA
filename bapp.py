@@ -116,6 +116,7 @@ def bapp(model,
 			epsilons = np.logspace(-4, 0, num=20, endpoint = True) * dist
 			epsilons_shape = [20] + len(params['shape']) * [1]
 			perturbeds = perturbed + epsilons.reshape(epsilons_shape) * update
+			perturbeds = clip_image(perturbeds, params['clip_min'], params['clip_max'])
 			idx_perturbed = decision_function(model, perturbeds, params)
 
 			if np.sum(idx_perturbed) > 0:
@@ -268,7 +269,8 @@ def initialize(model, sample, params):
 	if params['target_image'] is None:
 		# Find a misclassified random noise.
 		while True:
-			random_noise = np.random.uniform(-1, 1, size = params['shape'])
+			random_noise = np.random.uniform(params['clip_min'], 
+				params['clip_max'], size = params['shape'])
 			success = decision_function(model,random_noise[None], params)
 			if success:
 				break
