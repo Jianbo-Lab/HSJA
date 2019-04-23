@@ -271,9 +271,13 @@ def initialize(model, sample, params):
 		while True:
 			random_noise = np.random.uniform(params['clip_min'], 
 				params['clip_max'], size = params['shape'])
-			success = decision_function(model,random_noise[None], params)
+			success = decision_function(model,random_noise[None], params)[0]
+			num_evals += 1
 			if success:
 				break
+			assert num_evals < 1e4,"Initialization failed! "
+			"Use a misclassified image as `target_image`" 
+
 
 		# Binary search to minimize l2 distance to original image.
 		low = 0.0
