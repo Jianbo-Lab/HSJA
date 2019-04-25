@@ -104,7 +104,7 @@ def bapp(model,
 				update, dist, model, params)
 
 			# Update the sample. 
-			perturbed = clip_image(perturbed + epsilon * gradf, 
+			perturbed = clip_image(perturbed + epsilon * update, 
 				clip_min, clip_max)
 
 			# Binary search to return to the boundary. 
