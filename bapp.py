@@ -71,13 +71,14 @@ def bapp(model,
 		
 	# Initialize.
 	perturbed = initialize(model, sample, params)
-	dist_post_update = compute_distance(perturbed, sample, constraint)
+	
 
 	# Project the initialization to the boundary.
-	perturbed, dist = binary_search_batch(sample, 
+	perturbed, dist_post_update = binary_search_batch(sample, 
 		np.expand_dims(perturbed, 0), 
 		model, 
 		params)
+	dist = compute_distance(perturbed, sample, constraint)
 
 	for j in np.arange(params['num_iterations']):
 		params['cur_iter'] = j + 1
