@@ -17,8 +17,8 @@ We provide as an example the source code to run HopSkipJumpAttack on a ResNet tr
 ```shell
 ###############################################
 # Omit if already git cloned.
-git clone https://github.com/Jianbo-Lab/BAPP
-cd BAPP
+git clone https://github.com/Jianbo-Lab/HSJA
+cd HSJA
 ############################################### 
 # Carry out L2 based untargeted attack on 5 samples.
 python main.py --constraint l2 --attack_type untargeted --num_samples 5
