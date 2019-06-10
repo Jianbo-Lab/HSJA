@@ -34,7 +34,7 @@ python main.py --constraint linf --attack_type targeted --num_samples 5
 # the right-hand side is its perturbed version.
 ```
 
-See `main.py` and `bapp.py` for details. 
+See `main.py` and `hsja.py` for details. 
 ## Citation
 If you use this code for your research, please cite our [paper](https://arxiv.org/abs/1904.02144):
 ```
