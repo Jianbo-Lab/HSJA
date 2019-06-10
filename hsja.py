@@ -1,13 +1,13 @@
 from __future__ import absolute_import, division, print_function
 import numpy as np
 
-def bapp(model, 
+def hsja(model, 
 	sample, 
 	clip_max = 1, 
 	clip_min = 0, 
 	constraint = 'l2', 
 	num_iterations = 40, 
-	gamma = 0.01, 
+	gamma = 1.0, 
 	target_label = None, 
 	target_image = None, 
 	stepsize_search = 'geometric_progression', 
@@ -15,7 +15,7 @@ def bapp(model,
 	init_num_evals = 100,
 	verbose = True):
 	"""
-	Main algorithm for Boundary Attack ++.
+	Main algorithm for HopSkipJumpAttack.
 
 	Inputs:
 	model: the object that has predict method. 
@@ -30,7 +30,9 @@ def bapp(model,
 
 	num_iterations: number of iterations.
 
-	gamma: used to set binary search threshold theta.
+	gamma: used to set binary search threshold theta. The binary search 
+	threshold theta is gamma / d^{3/2} for l2 attack and gamma / d^2 for 
+	linf attack.
 
 	target_label: integer or None for nontargeted attack.
 
@@ -65,9 +67,9 @@ def bapp(model,
 
 	# Set binary search threshold.
 	if params['constraint'] == 'l2':
-		params['theta'] = params['gamma'] / np.sqrt(params['d'])
+		params['theta'] = params['gamma'] / (np.sqrt(params['d']) * params['d'])
 	else:
-		params['theta'] = params['gamma'] / (params['d'])
+		params['theta'] = params['gamma'] / (params['d'] ** 2)
 		
 	# Initialize.
 	perturbed = initialize(model, sample, params)

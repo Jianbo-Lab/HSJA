@@ -3,7 +3,7 @@ from __future__ import absolute_import, division, print_function
 
 from build_model import ImageModel 
 from load_data import ImageData, split_data
-from bapp import bapp
+from hsja import hsja
 import numpy as np
 import tensorflow as tf
 import sys
@@ -80,13 +80,13 @@ def attack(args):
 
 		print('attacking the {}th sample...'.format(i))
 
-		perturbed = bapp(model, 
+		perturbed = hsja(model, 
 							sample, 
 							clip_max = 1, 
 							clip_min = 0, 
 							constraint = args.constraint, 
 							num_iterations = args.num_iterations, 
-							gamma = 0.01, 
+							gamma = 1.0, 
 							target_label = target_label, 
 							target_image = target_image, 
 							stepsize_search = args.stepsize_search, 
